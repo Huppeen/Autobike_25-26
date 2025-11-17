@@ -1,0 +1,326 @@
+set(0,'defaulttextinterpreter','none');
+clear all; 
+clear;
+close all;
+clc;
+
+data_path = 'data_calibration.csv';  
+data_lab = readtable(data_path);  
+
+%% -------- Read columns--------
+gx = data_lab.GyroscopeX_rad_s_(:).';   % 1×N
+gy = data_lab.GyroscopeY_rad_s_(:).';
+gz = data_lab.GyroscopeZ_rad_s_(:).';
+
+ax = data_lab.AccelerometerX_rad_s_2_(:).';  
+ay = data_lab.AccelerometerY_rad_s_2_(:).';
+az = data_lab.AccelerometerZ_rad_s_2_(:).';
+
+
+W = [gx; gy; gz];             % 3×N gyroscope (sensor frame)
+A = [ax; ay; az];             % 3×N accelerometer (sensor frame)
+N = size(W,2);
+
+%% -------- 1) Detect static segment (for gravity direction + gyro bias) --------
+w_norm   = vecnorm(W);                          
+th_quiet = prctile(w_norm, 15);               
+quiet_mask = w_norm <= th_quiet;
+
+A_static = A(:, quiet_mask);
+W_static = W(:, quiet_mask);
+
+% Gyroscope bias
+% bias_gyro = mean(W_static, 2);
+% W_corr    = W - bias_gyro;
+W_corr    = W;
+
+
+A_grav = A;
+
+A_staticG = A_grav(:, quiet_mask);
+
+% Gravity direction in the sensor frame (= body +Z_b, Down in FRD)
+zhat_s = mean(A_staticG, 2);
+zhat_s = zhat_s / norm(zhat_s);
+
+%% -------- 2) Select samples dominated by roll to estimate +X_b direction --------
+w_norm_corr = vecnorm(W_corr);
+rel_z = abs(sum(W_corr .* zhat_s, 1)) ./ max(w_norm_corr, 1e-6);  
+roll_mask = (w_norm_corr > prctile(w_norm_corr, 60)) & (rel_z < 0.3);
+W_roll = W_corr(:, roll_mask);
+
+C = (W_roll * W_roll.') / max(1, size(W_roll,2));   
+[V,D] = eig(C); [~, idx] = max(diag(D));
+x_tilde = V(:, idx);
+
+x_proj = x_tilde - (zhat_s' * x_tilde) * zhat_s;
+xhat_s = x_proj / norm(x_proj);
+
+% If needed: flip sign so that left roll < 0
+xhat_s = -xhat_s; 
+
+%% -------- 3) Use cross product to get +Y_b, then assemble rotation matrix --------
+yhat_s = cross(zhat_s, xhat_s);   
+yhat_s = yhat_s / norm(yhat_s);
+
+R0 = [xhat_s, yhat_s, zhat_s].';
+det(R0)
+[U,~,V] = svd(R0);
+R_bs = U * diag([1 1 sign(det(U*V'))]) * V';
+
+
+%% -------- 4) Transform to body frame --------
+W_b = R_bs * W_corr;     % gyro in body frame
+A_b = R_bs * A_grav;     % accel (gravity-like) in body frame
+
+roll_rate_b  = W_b(1,:).';   % ωx 
+pitch_rate_b = W_b(2,:).';   % ωy 
+yaw_rate_b   = W_b(3,:).';   % ωz 
+
+X_accelerometer_b = A_b(1,:).';   % ax (forward)
+Y_accelerometer_b = A_b(2,:).';   % ay (Left)
+Z_accelerometer_b = A_b(3,:).';   % az (Up)
+
+
+
+subplot(3,1,1)
+plot(0.001 * (data_lab.Time_ms_-465775), 180/pi * roll_rate_b, 'r')
+hold on
+% ylim([-30 10])
+xlabel('Time (s)')
+ylabel('angle rate (degree/s)')
+title('Measured angular rate value about the X-axis of Bike frame vs Time')
+grid on
+subplot(3,1,2)
+plot(0.001 * (data_lab.Time_ms_-465775), 180/pi * pitch_rate_b, 'r')
+hold on
+% ylim([-2 6])
+xlabel('Time (s)')
+ylabel('angle rate (degree/s)')
+title('Measured angular rate value about the Y-axis of Bike frame vs Time')
+grid on
+subplot(3,1,3)
+plot(0.001 * (data_lab.Time_ms_-465775), 180/pi * yaw_rate_b, 'r')
+hold on
+% ylim([-10 25])
+xlabel('Time (s)')
+ylabel('angle rate (degree/s)')
+title('Measured angular rate value about the Z-axis of Bike frame vs Time')
+grid on
+
+
+%% ===== Params =====
+dt = 0.05;  
+g  = 9.8173;            % Gothenburg 9.8173
+k0 = 1;
+idx = k0:numel(X_accelerometer_b);
+t   = (0:numel(idx)-1)' * dt;
+
+% body-frame specific force (raw accelerometer)
+ax_b = X_accelerometer_b(idx);
+ay_b = Y_accelerometer_b(idx);
+az_b = Z_accelerometer_b(idx);
+f_b  = [ax_b ay_b az_b];           % N×3
+
+% ---------- Static window: first ~2 s ----------
+K0      = max(1, min(round(4.0/dt), size(f_b,1)));
+fb_mean = mean(f_b(1:K0,:), 1).';  % body-frame mean specific force
+
+% === A 方案：起始直立静止 ===
+phi0   = 0;                        % roll init
+theta0 = 0;                        % pitch init
+psi0   = 0;                        % yaw 可置 0 或用磁/GNSS
+
+% accel bias from upright prior: fb_mean ≈ [0;0;g] + b_a
+ba_hat = fb_mean - [0;0;g];        % 3×1
+
+% ---- gyro bias removal as before ----
+p = roll_rate_b(:); q = pitch_rate_b(:); r = yaw_rate_b(:);
+K = min(round(2.0/dt), numel(p));
+p = p - mean(p(1:K));
+q = q - mean(q(1:K));
+r = r - mean(r(1:K));
+
+% ---- integrate Euler (ZYX) with correct initial angles ----
+N = numel(p);
+inte_roll  = zeros(N,1); inte_pitch = zeros(N,1); inte_yaw = zeros(N,1);
+inte_roll(1)=phi0; inte_pitch(1)=theta0; inte_yaw(1)=psi0;
+
+% for k = 2:N
+%     phi = inte_roll(k-1); th = inte_pitch(k-1);
+%     T = [ 1,  sin(phi)*tan(th),  cos(phi)*tan(th);
+%           0,  cos(phi),         -sin(phi);
+%           0,  sin(phi)/cos(th),  cos(phi)/cos(th) ];
+%     eul_dot = T * [p(k); q(k); r(k)];
+%     inte_roll(k)  = phi + eul_dot(1)*dt;
+%     inte_pitch(k) = th  + eul_dot(2)*dt;
+%     inte_yaw(k)   = inte_yaw(k-1) + eul_dot(3)*dt;
+% end
+
+% inte_roll = cumtrapz(roll_rate_b) * dt;
+% inte_pitch = cumtrapz(pitch_rate_b) * dt;
+% inte_yaw = cumtrapz(yaw_rate_b) * dt;
+
+for k = 2:N
+    % 上一拍状态
+    phi1 = inte_roll(k-1);
+    th1  = inte_pitch(k-1);
+
+    % 1) 用上一拍的 T 和角速率做一次“预测”
+    T1 = [ 1,  sin(phi1)*tan(th1),   cos(phi1)*tan(th1);
+           0,  cos(phi1),           -sin(phi1);
+           0,  sin(phi1)/max(1e-6,cos(th1)),  cos(phi1)/max(1e-6,cos(th1)) ];
+    e1 = T1 * [p(k-1); q(k-1); r(k-1)];
+    phi_pred = phi1 + e1(1)*dt;
+    th_pred  = th1  + e1(2)*dt;
+
+    % 2) 在“预测的中点”用当前角速率再计算一次导数
+    pm = 0.5*(p(k-1)+p(k));
+    qm = 0.5*(q(k-1)+q(k));
+    rm = 0.5*(r(k-1)+r(k));
+    phim = 0.5*(phi1 + phi_pred);
+    thm  = 0.5*(th1  + th_pred);
+
+    Tm = [ 1,  sin(phim)*tan(thm),   cos(phim)*tan(thm);
+           0,  cos(phim),           -sin(phim);
+           0,  sin(phim)/max(1e-6,cos(thm)),  cos(phim)/max(1e-6,cos(thm)) ];
+    em = Tm * [pm; qm; rm];
+
+    % 3) 梯形/中值更新（相当于 e1 与 em 的平均）
+    inte_roll(k)  = phi1 + em(1)*dt;
+    inte_pitch(k) = th1  + em(2)*dt;
+    inte_yaw(k)   = inte_yaw(k-1) + em(3)*dt;
+
+    % 可选：数值保护
+    % inte_yaw(k) = wrapToPi(inte_yaw(k));
+end
+
+
+fig = figure();
+subplot(3,1,1)
+plot(0.001 * (data_lab.Time_ms_-465775), 180/pi * inte_roll, 'r')
+hold on
+xlabel('Time (s)')
+ylabel('angle (degree)')
+title('Roll angle from integration of measured roll rate vs Time')
+grid on
+subplot(3,1,2)
+plot(0.001 * (data_lab.Time_ms_-465775), 180/pi * inte_pitch, 'r')
+hold on
+xlabel('Time (s)')
+ylabel('angle (degree)')
+title('Pitch angle from integration of measured pitch rate vs Time')
+grid on
+subplot(3,1,3)
+plot(0.001 * (data_lab.Time_ms_-465775), 180/pi * inte_yaw, 'r')
+hold on
+xlabel('Time (s)')
+ylabel('angle (degree)')
+ylim([-10 300]); 
+title('Yaw angle from integration of measured yaw rate vs Time')
+grid on
+% ---- per-sample: remove bias -> rotate -> add gravity ----
+g_n  = [0;0;-g];
+acc_e = zeros(numel(idx),3);
+for k = 1:numel(idx)
+    phi = inte_roll(k); th = inte_pitch(k); psi = inte_yaw(k);
+    Rz = [cos(psi) -sin(psi) 0; sin(psi) cos(psi) 0; 0 0 1];
+    Ry = [cos(th) 0 sin(th); 0 1 0; -sin(th) 0 cos(th)];
+    Rx = [1 0 0; 0 cos(phi) -sin(phi); 0 sin(phi) cos(phi)];
+    Cbn = Rz*Ry*Rx;                  % b -> n
+
+    f_b_corr = f_b(k,:).' - ba_hat;  % remove accel bias in body
+    f_n      = Cbn * f_b_corr;       % rotate specific force to ENU
+    a_n      = f_n + g_n;            % linear acceleration (ENU)
+    acc_e(k,:) = a_n.';
+end
+
+%% ===== Integration: acc -> vel =====
+vx = cumtrapz(t, acc_e(:,1));
+vy = cumtrapz(t, acc_e(:,2));
+
+k20 = find(t >= 20, 1, 'first');
+if ~isempty(k20)
+    offset = vx(k20);
+    vx(k20:end) = vx(k20:end) - offset;
+    x = cumtrapz(t, vy);
+
+    offset = vy(k20);
+    vy(k20:end) = vy(k20:end) - offset;
+    y = cumtrapz(t, vy);
+end
+
+
+x  = cumtrapz(t, vx);
+y  = cumtrapz(t, vy);
+
+
+
+% ---- keep only samples up to 58 s for plotting ----
+t_end = 58;                          % seconds
+k_end = find(t <= t_end, 1, 'last'); % last index with t <= 58
+if isempty(k_end), k_end = numel(t); end
+
+x_plot = x(1:k_end);
+y_plot = y(1:k_end);
+
+figure; hold on; grid on; axis equal;
+% trajectory polyline
+plot(x_plot, y_plot, '-', 'Color', [0 0.2 0.9], 'LineWidth', 1.6);
+% draw a hollow circle at each sample
+plot(x_plot, y_plot, 'o', 'MarkerSize', 4, ...
+     'MarkerEdgeColor', [0 0.2 0.9], 'MarkerFaceColor', 'w');
+% highlight start/end (of the cropped segment)
+plot(x_plot(1),  y_plot(1),  'go', 'MarkerSize', 6, 'MarkerFaceColor', 'g', 'DisplayName','start');
+plot(x_plot(end), y_plot(end), 'ro', 'MarkerSize', 6, 'MarkerFaceColor', 'r', 'DisplayName','end');
+xlabel('x_{local} (m)'); ylabel('y_{local} (m)');
+title('Trajectory with per-sample circle markers');
+legend('trajectory','samples','start','end','Location','best');
+
+
+
+fig = figure();
+subplot(3,1,1)
+plot(acc_e(:,1), 'r')
+hold on
+xlabel('Sample points')
+ylabel('accelerater')
+title('Acceleration value in Local coordinate vs Time')
+grid on
+subplot(3,1,2)
+plot(acc_e(:,2), 'r')
+hold on
+xlabel('Sample points')
+ylabel('accelerater')
+title('Acceleration value in Local coordinate vs Time')
+grid on
+subplot(3,1,3)
+plot(acc_e(:,3), 'r')
+hold on
+xlabel('Sample points')
+ylabel('accelerater')
+title('Acceleration value in Local coordinate vs Time')
+grid on
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

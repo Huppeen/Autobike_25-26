@@ -1,0 +1,494 @@
+set(0,'defaulttextinterpreter','none');
+clear all; 
+clear;
+close all;
+clc;
+
+data_path = 'data_test_corridor.csv';  
+
+data_lab = readtable(data_path);  
+
+
+%% -------- Read columns--------
+gx = data_lab.GyroscopeX_rad_s_(:).';   % 1×N
+gy = data_lab.GyroscopeY_rad_s_(:).';
+gz = data_lab.GyroscopeZ_rad_s_(:).';
+
+ax = data_lab.AccelerometerX_rad_s_2_(:).';  
+ay = data_lab.AccelerometerY_rad_s_2_(:).';
+az = data_lab.AccelerometerZ_rad_s_2_(:).';
+
+
+W = [gx; gy; gz];             % 3×N gyroscope (sensor frame)
+A = [ax; ay; az];             % 3×N accelerometer (sensor frame)
+N = size(W,2);
+
+%% -------- 1) Detect static segment (for gravity direction + gyro bias) --------
+w_norm   = vecnorm(W);                          
+th_quiet = prctile(w_norm, 15);               
+quiet_mask = w_norm <= th_quiet;
+
+A_static = A(:, quiet_mask);
+W_static = W(:, quiet_mask);
+
+% Gyroscope bias
+bias_gyro = mean(W_static, 2);
+W_corr    = W - bias_gyro;
+
+% W_corr    = W;
+
+A_grav = A;
+
+A_staticG = A_grav(:, quiet_mask);
+
+% Gravity direction in the sensor frame (= body +Z_b, Down in FRD)
+zhat_s = mean(A_staticG, 2);
+zhat_s = zhat_s / norm(zhat_s);
+
+%% -------- 2) Select samples dominated by roll to estimate +X_b direction --------
+w_norm_corr = vecnorm(W_corr);
+rel_z = abs(sum(W_corr .* zhat_s, 1)) ./ max(w_norm_corr, 1e-6);  
+roll_mask = (w_norm_corr > prctile(w_norm_corr, 60)) & (rel_z < 0.3);
+W_roll = W_corr(:, roll_mask);
+
+C = (W_roll * W_roll.') / max(1, size(W_roll,2));   
+[V,D] = eig(C); [~, idx] = max(diag(D));
+x_tilde = V(:, idx);
+
+x_proj = x_tilde - (zhat_s' * x_tilde) * zhat_s;
+xhat_s = x_proj / norm(x_proj);
+
+% If needed: flip sign so that left roll < 0
+xhat_s = -xhat_s; 
+
+%% -------- 3) Use cross product to get +Y_b, then assemble rotation matrix --------
+yhat_s = cross(zhat_s, xhat_s);   
+yhat_s = yhat_s / norm(yhat_s);
+
+R0 = [xhat_s, yhat_s, zhat_s].';
+det(R0)
+[U,~,V] = svd(R0);
+R_bs = U * diag([1 1 sign(det(U*V'))]) * V';
+
+
+%% -------- 4) Transform to body frame --------
+W_b = R_bs * W_corr;     % gyro in body frame
+A_b = R_bs * A_grav;     % accel (gravity-like) in body frame
+
+roll_rate_b  = W_b(1,:).';   % ωx 
+pitch_rate_b = W_b(2,:).';   % ωy 
+yaw_rate_b   = W_b(3,:).';   % ωz 
+
+X_accelerometer_b = A_b(1,:).';   % ax (forward)
+Y_accelerometer_b = A_b(2,:).';   % ay (Left)
+Z_accelerometer_b = A_b(3,:).';   % az (Up)
+
+
+
+
+
+%% ===== Params =====
+dt = 0.05;  
+g    = 9.8173;
+% 9.8173
+k0   = 1;                 % first data index (includes initial stationary segment)
+idx  = k0:numel(X_accelerometer_b);
+t    = (0:numel(idx)-1)' * dt;
+
+% body-frame specific force (raw accelerometer)
+ax_b = X_accelerometer_b(idx);
+ay_b = Y_accelerometer_b(idx);
+az_b = Z_accelerometer_b(idx);
+
+f_b  = [ax_b ay_b az_b];        % N×3
+
+% ---------- Static window: use accelerometer to level (roll/pitch) and estimate accel bias ----------
+K0 = max(1, min(round(2.0/dt), size(f_b,1)));   % approx. first 2 s
+fb_mean = mean(f_b(1:K0,:), 1).';               % mean in body frame
+
+% Initialize roll/pitch from accelerometer (yaw unaffected by gravity; set to 0)
+phi0   = atan2(fb_mean(2), fb_mean(3));                         % roll
+theta0 = atan2(-fb_mean(1), sqrt(fb_mean(2)^2 + fb_mean(3)^2)); % pitch
+psi0   = 0;
+
+
+% ------------------------------------------------------------
+% ------------------------------------------------------------
+% -------------------Calculate Eular Angles-------------------
+dt = 0.05;     
+p = roll_rate_b(:);   % rad/s (body x)
+q = pitch_rate_b(:);  % rad/s (body y)
+r = yaw_rate_b(:);    % rad/s (body z)
+
+% ---- Remove gyro bias (use first K samples during stationary)----
+K = min(round(2.0/dt), numel(p));
+p = p - mean(p(1:K));
+q = q - mean(q(1:K));
+r = r - mean(r(1:K));
+
+
+N = numel(p);
+inte_roll  = zeros(N,1);  % phi
+inte_pitch = zeros(N,1);  % theta
+inte_yaw   = zeros(N,1);  % psi
+
+
+inte_roll(1)  = phi0;
+inte_pitch(1) = theta0;
+inte_yaw(1)   = psi0;
+
+for k = 2:N
+    phi = inte_roll(k-1);
+    th  = inte_pitch(k-1);
+
+    T = [ 1,  sin(phi)*tan(th),  cos(phi)*tan(th);
+          0,  cos(phi),         -sin(phi);
+          0,  sin(phi)/cos(th),  cos(phi)/cos(th) ];
+
+    eul_dot = T * [p(k); q(k); r(k)];
+    inte_roll(k)  = phi + eul_dot(1)*dt;
+    inte_pitch(k) = th  + eul_dot(2)*dt;
+    inte_yaw(k)   = inte_yaw(k-1) + eul_dot(3)*dt;
+end
+
+% inte_roll = cumtrapz(roll_rate_b) * dt;
+% inte_pitch = cumtrapz(pitch_rate_b) * dt;
+% inte_yaw = cumtrapz(yaw_rate_b) * dt;
+
+% 
+fig = figure();
+subplot(3,1,1)
+plot(0.001 * (data_lab.Time_ms_-276354), 180/pi * inte_roll, 'r')
+hold on
+xlabel('Time (s)')
+ylabel('angle (degree)')
+title('Roll angle from integration of measured roll rate vs Time')
+grid on
+subplot(3,1,2)
+plot(0.001 * (data_lab.Time_ms_-276354), 180/pi * inte_pitch, 'r')
+hold on
+xlabel('Time (s)')
+ylabel('angle (degree)')
+title('Pitch angle from integration of measured pitch rate vs Time')
+grid on
+subplot(3,1,3)
+plot(0.001 * (data_lab.Time_ms_-276354), 180/pi * inte_yaw, 'r')
+hold on
+xlabel('Time (s)')
+ylabel('angle (degree)')
+ylim([-10 300]); 
+title('Yaw angle from integration of measured yaw rate vs Time')
+grid on
+
+
+
+Rz = @(psi)[cos(psi) -sin(psi) 0; sin(psi) cos(psi) 0; 0 0 1];
+Ry = @(th) [cos(th) 0 sin(th); 0 1 0; -sin(th) 0 cos(th)];
+Rx = @(ph) [1 0 0; 0 cos(ph) -sin(ph); 0 sin(ph) cos(ph)];
+
+Cbn0  = Rz(psi0)*Ry(theta0)*Rx(phi0);   % initial b->n
+g_n   = [0;0;-g];
+
+% Estimate accelerometer bias (body frame): f_b ≈ -C_n^b g_n + b_a  =>  b_a = fb_mean + C_n^b g_n
+ba_hat = fb_mean + Cbn0.' * g_n        % 3×1
+% ba_hat = [0.0003, 0.0027, 0.1758]';
+% ---------- If Euler-angle trajectory (ZYX) is available, use it per sample ----------
+roll  = inte_roll(idx);    % φ
+pitch = inte_pitch(idx);   % θ
+yaw   = inte_yaw(idx);     % ψ
+N     = numel(idx);
+
+%% ===== Body -> ENU, remove accel bias and add gravity back =====
+acc_e = zeros(N,3);        % a_n (ENU) = linear acceleration
+for k = 1:N
+    phi = roll(k); th = pitch(k); psi = yaw(k);
+
+    Rz_k = [ cos(psi) -sin(psi) 0;
+             sin(psi)  cos(psi) 0;
+                   0         0  1];
+    Ry_k = [ cos(th)  0  sin(th);
+                   0  1       0;
+            -sin(th)  0  cos(th)];
+    Rx_k = [ 1    0          0;
+             0  cos(phi) -sin(phi);
+             0  sin(phi)  cos(phi)];
+    Cbn_k = Rz_k * Ry_k * Rx_k;      % b -> n
+
+    f_b_corr = f_b(k,:).' - ba_hat;  % remove accel bias (body frame)
+    f_n      = Cbn_k * f_b_corr;     % rotate specific force to ENU
+    a_n      = f_n + g_n;            % linear acceleration (ENU): add gravity back
+
+    acc_e(k,:) = a_n.';              % store ENU: [aE aN aU]
+end
+
+
+% fig = figure();
+% subplot(3,1,1)
+% plot(0.001 * (data_lab.Time_ms_-276354), acc_e(:,1), 'r')
+% hold on
+% xlabel('Time (s)')
+% ylabel('Acceleration (m/s^2)')
+% title('Global-Frame East (X) linear acceleration vs Time')
+% grid on
+% subplot(3,1,2)
+% plot(0.001 * (data_lab.Time_ms_-276354), acc_e(:,2), 'r')
+% hold on
+% xlabel('Time (s)')
+% ylabel('Acceleration (m/s^2)')
+% title('Global-Frame North (Y) linear acceleration vs Time')
+% grid on
+% subplot(3,1,3)
+% plot(0.001 * (data_lab.Time_ms_-276354), acc_e(:,3), 'r')
+% hold on
+% xlabel('Time (s)')
+% ylabel('Acceleration (m/s^2)') 
+% title('Global-Frame Vertical (Z) linear acceleratione vs Time')
+% grid on
+
+
+
+%% ===== Earth -> LOCAL (align initial heading to +x) =====
+% psi0 = yaw(1);  
+% R_e2l = [ cos(-psi0) -sin(-psi0) 0;
+%           sin(-psi0)  cos(-psi0) 0;
+%                    0           0 1 ];
+% acc_l = (R_e2l * acc_e.').';    % N×3
+          
+          
+
+%% ===== Integration: acc -> vel =====
+vx = cumtrapz(t, acc_e(:,1));
+vy = cumtrapz(t, acc_e(:,2));
+
+k20 = find(t >= 20, 1, 'first');
+if ~isempty(k20)
+    offset = vx(k20);
+    vx(k20:end) = vx(k20:end) - offset;
+    x = cumtrapz(t, vy);
+
+    offset = vy(k20);
+    vy(k20:end) = vy(k20:end) - offset;
+    y = cumtrapz(t, vy);
+end
+
+%% ===== Second integration: vel -> pos =====
+x = cumtrapz(t, vx);
+y = cumtrapz(t, vy);
+
+%% ===== Plot =====
+
+% fig = figure();
+% subplot(2,1,1)
+% plot(0.001 * (data_lab.Time_ms_-276354), vx, 'r')
+% hold on
+% xlabel('Time (s)')
+% ylabel('Acceleration (m/s^2)')
+% title('Speed along X-axis in Local coordinate system vs Time')
+% grid on
+% subplot(2,1,2)
+% plot(0.001 * (data_lab.Time_ms_-276354), vy, 'r')
+% hold on
+% xlabel('Time (s)')
+% ylabel('Acceleration (m/s^2)')
+% title('Speed along Y-axis in Local coordinate system vs Time')
+% grid on
+
+
+
+figure; hold on; grid on; axis equal;
+% trajectory polyline
+plot(x, y, '-', 'Color', [0 0.2 0.9], 'LineWidth', 1.6);
+% draw a hollow circle at each sample
+plot(x, y, 'o', 'MarkerSize', 4, ...
+     'MarkerEdgeColor', [0 0.2 0.9], 'MarkerFaceColor', 'w');
+% highlight start/end
+plot(x(1),  y(1),  'go', 'MarkerSize', 6, 'MarkerFaceColor', 'g', 'DisplayName','start');
+plot(x(end), y(end), 'ro', 'MarkerSize', 6, 'MarkerFaceColor', 'r', 'DisplayName','end');
+xlabel('x_{local} (m)'); ylabel('y_{local} (m)');
+title('Trajectory with per-sample circle markers');
+legend('trajectory','samples','start','end','Location','best');
+
+
+fig = figure();
+subplot(3,1,1)
+plot(acc_e(:,1), 'r')
+hold on
+xlabel('Sample points')
+ylabel('accelerater')
+title('Acceleration value in Local coordinate vs Time')
+grid on
+subplot(3,1,2)
+plot(acc_e(:,2), 'r')
+hold on
+xlabel('Sample points')
+ylabel('accelerater')
+title('Acceleration value in Local coordinate vs Time')
+grid on
+subplot(3,1,3)
+plot(acc_e(:,3), 'r')
+hold on
+xlabel('Sample points')
+ylabel('accelerater')
+title('Acceleration value in Local coordinate vs Time')
+grid on
+
+
+
+
+
+
+
+
+
+
+% %% ======== Parameters ========
+% use_local_frame   = true;   % align initial heading to local +x
+% use_init_bias_xy  = true;   % remove initial horizontal accel bias (first M seconds)
+% bias_win_sec      = 2.0;    % seconds used for bias estimate
+% use_ZUPT          = true;   % zero-velocity update on near-static/only-rotation segments
+% zupt_acc_thr      = 0.12;   % m/s^2 threshold on horizontal accel norm
+% zupt_gyro_thr_deg = 3.0;    % deg/s threshold on gyro norm (only-rotation gate)
+% zupt_win_sec      = 0.25;   % seconds for moving-average window
+% g                 = 9.81;   % gravity
+% 
+% %% ======== Map your inputs (edit if needed) ========
+% ax_b = X_accelerometer_b(:);
+% ay_b = Y_accelerometer_b(:);
+% az_b = Z_accelerometer_b(:);
+% 
+% % Gyro (rad/s)
+% p = roll_rate_b(:);
+% q = pitch_rate_b(:);
+% r = yaw_rate_b(:);
+% 
+% N = numel(ax_b);
+% t = (0:N-1)' * dt;
+% 
+% %% ======== 1) Gyro bias estimation (static at start) & removal ========
+% % Use first K samples as no-motion to estimate gyro bias
+% K = min(round(2.0/dt), N);        % ~ first 2 s; change if needed
+% bg = [mean(p(1:K)); mean(q(1:K)); mean(r(1:K))];
+% p = p - bg(1);  q = q - bg(2);  r = r - bg(3);
+% 
+% %% ======== 2) Initial attitude from gravity (pitch/roll), yaw=0 ========
+% ax0 = mean(ax_b(1:K));  ay0 = mean(ay_b(1:K));  az0 = mean(az_b(1:K));
+% % pitch (theta), roll (phi) from static gravity; ZYX convention
+% phi0  = atan2( ay0, az0 );                                   % roll about x
+% th0   = atan2(-ax0, sqrt(ay0^2 + az0^2));                    % pitch about y
+% psi0  = 0;                                                   % initial yaw (no magnet/GNSS)
+% 
+% qk = eul2quat([psi0, th0, phi0]);    % MATLAB eul2quat: ZYX -> [yaw pitch roll]
+% Q  = zeros(N,4); 
+% Q(1,:) = qk;
+% 
+% %% ======== 3) Quaternion integration from gyro ========
+% % Simple explicit Euler (works fine with small dt). You can replace by mid-point/RK if needed.
+% for k = 2:N
+%     w_avg = 0.5 * [p(k-1)+p(k); q(k-1)+q(k); r(k-1)+r(k)];  % average gyro over step
+%     % Quaternion differential: q_dot = 0.5 * [0 w]^⊗ q
+%     Omega = [0,           -w_avg(1), -w_avg(2), -w_avg(3);
+%              w_avg(1),     0,         w_avg(3), -w_avg(2);
+%              w_avg(2),    -w_avg(3),  0,         w_avg(1);
+%              w_avg(3),     w_avg(2), -w_avg(1),  0        ];
+%     q_prev = Q(k-1,:)';
+%     q_dot  = 0.5 * Omega * q_prev;
+%     q_new  = q_prev + q_dot * dt;
+%     q_new  = q_new / norm(q_new);               % renormalize
+%     Q(k,:) = q_new.';
+% end
+% 
+% %% ======== 4) Body -> Earth rotation, remove gravity ========
+% acc_e = zeros(N,3);
+% for k = 1:N
+%     Rb2e = quat2rotm(Q(k,:));                   % rotation from body to earth (ENU-like)
+%     a_e  = Rb2e * [ax_b(k); ay_b(k); az_b(k)];
+%     acc_e(k,:) = (a_e - [0;0;g]).';             % remove gravity (Up=+z)
+% end
+% 
+% %% ======== 5) Earth -> LOCAL (optional): align initial heading to +x ========
+% if use_local_frame
+%     % Compute initial yaw from initial quaternion (ZYX)
+%     eul0  = quat2eul(Q(1,:));                   % [yaw pitch roll]
+%     psi0q = eul0(1);
+%     Re2l  = [ cos(-psi0q) -sin(-psi0q) 0;
+%               sin(-psi0q)  cos(-psi0q) 0;
+%                      0            0    1 ];
+%     acc_l = (Re2l * acc_e.').';
+% else
+%     acc_l = acc_e;
+% end
+% 
+% %% ======== 6) Optional: initial horizontal bias removal ========
+% if use_init_bias_xy
+%     M = max(1, min(round(bias_win_sec/dt), N));
+%     bias_xy = mean(acc_l(1:M,1:2), 1);
+%     acc_l(:,1) = acc_l(:,1) - bias_xy(1);
+%     acc_l(:,2) = acc_l(:,2) - bias_xy(2);
+% end
+% 
+% %% ======== 7) Integrate to velocity ========
+% vx = cumtrapz(t, acc_l(:,1));
+% vy = cumtrapz(t, acc_l(:,2));
+% vz = cumtrapz(t, acc_l(:,3));
+% 
+% %% ======== 8) ZUPT (optional): segment-wise drift removal on near-static segments ========
+% if use_ZUPT
+%     w = max(1, round(zupt_win_sec/dt));
+%     a_h = vecnorm(acc_l(:,1:2),2,2);
+%     gyro_norm_deg = rad2deg( vecnorm([p q r],2,2) );
+%     is_static = movmean(a_h, w) < zupt_acc_thr & movmean(gyro_norm_deg, w) < zupt_gyro_thr_deg;
+% 
+%     d = diff([false; is_static; false]);
+%     seg_st = find(d==1);  seg_ed = find(d==-1)-1;
+% 
+%     for i = 1:numel(seg_st)
+%         s = seg_st(i); e = seg_ed(i);
+%         % cache drift at end of the static segment
+%         vx_d = vx(e);  vy_d = vy(e);  vz_d = vz(e);
+%         % clamp to zero within segment
+%         vx(s:e) = 0; vy(s:e) = 0; vz(s:e) = 0;
+%         % subtract drift from the remainder
+%         if e < N
+%             vx(e+1:end) = vx(e+1:end) - vx_d;
+%             vy(e+1:end) = vy(e+1:end) - vy_d;
+%             vz(e+1:end) = vz(e+1:end) - vz_d;
+%         end
+%     end
+% end
+% 
+% %% ======== 9) Integrate velocity to position ========
+% x = cumtrapz(t, vx);
+% y = cumtrapz(t, vy);
+% z = cumtrapz(t, vz);
+% 
+% %% ======== 10) Plots ========
+% figure; hold on; grid on; axis equal;
+% plot(x, y, 'b-', 'LineWidth', 1.5);
+% plot(x(end), y(end), 'ro', 'MarkerSize', 6, 'LineWidth', 1.2);
+% xlabel('x_{local} (m)'); ylabel('y_{local} (m)');
+% title('Trajectory in LOCAL frame (quaternion-based)');
+% legend('trajectory','final point','Location','best');
+% 
+% figure; 
+% plot3(x,y,z,'b-','LineWidth',1.2); grid on; axis equal;
+% xlabel('x (m)'); ylabel('y (m)'); zlabel('z (m)');
+% title('3D trajectory (quaternion-based)');
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

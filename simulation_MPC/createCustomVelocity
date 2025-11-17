@@ -1,0 +1,22 @@
+
+function createCustomVelocity(inputFile, outputFile, speedOffset)
+%read file
+data = readmatrix(inputFile);
+
+%get the arrays coloums x,y,v
+x_all = data(:,1);
+y_all = data(:,2);
+v_all = data(:,3);
+
+%add speed
+v_all = v_all + speedOffset;
+
+%constant speed doesn't works
+%v_all = ones(size(v_all)) * speedOffset;
+
+%create new tablw with new velocity
+new_data = [x_all, y_all, v_all];
+
+%create new matrix with new speed values
+writematrix(new_data, outputFile);
+
