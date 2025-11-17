@@ -26,7 +26,7 @@ load mpc_outer_params.mat
     ref_start_idx = 2; %end of page 64 of Lorenzo's thesis
 % Horizon distance [m]
     % hor_dis = 10; %tra cosa?
-    hor_dis = 5; %tra cosa?
+    hor_dis = 10; %tra cosa?
 %Constant Speed [m/s]
      vv = 2.6;
 % Open the Simulink Model
@@ -58,6 +58,7 @@ load mpc_outer_params.mat
 % matrices for nearest speed. Normally yes.
     interpolation = 0;  % used in Simulink (you can only use interpolation if scheduling = 1)
     if scheduling==0, interpolation = 0; end  % must be 0 if no scheduling
+
 % %% Initial states
 % if init == 1
 % disp('reading from file')
