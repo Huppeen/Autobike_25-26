@@ -9,7 +9,7 @@ clear all;
 clear;
 close all;
 clc;
-load mpc_outer_params.mat
+
 %% Simulation Settings and Bike and General Parameters
 % Gravitational Acceleration
     gg = 9.81;
@@ -17,8 +17,6 @@ load mpc_outer_params.mat
     model = 'Main_bikesim';
 % Friction coefficient specific to the red bicycle; values may vary for different bicycles
     friction_coefficient = 0.004;
-% Simulation time
-    sim_time = 1000;
 % Sampling Time
     Ts = 0.01; 
 % First closest point selection in reference. Starts at 2 because the one 
@@ -26,9 +24,10 @@ load mpc_outer_params.mat
     ref_start_idx = 2; %end of page 64 of Lorenzo's thesis
 % Horizon distance [m]
     % hor_dis = 10; %tra cosa?
-    hor_dis = 10; %tra cosa?
+    hor_dis = 5; %tra cosa?
 %Constant Speed [m/s]
-     vv = 2.6;
+     vv = 2;
+     v=vv; %for mpc 
 % Open the Simulink Model
     open([model '.slx']);
 % Choose the solver
@@ -59,154 +58,59 @@ load mpc_outer_params.mat
     interpolation = 0;  % used in Simulink (you can only use interpolation if scheduling = 1)
     if scheduling==0, interpolation = 0; end  % must be 0 if no scheduling
 
-% %% Initial states
-% if init == 1
-% disp('reading from file')
-%     % data_lab = readtable('Logging_data\Test_session_14_06\data_8.csv');
-% %    data_lab = readtable('Logging_data\Test_session_27_06\data_15.csv');
-% 
-%     %Delete the data before reseting the trajectory and obtain X/Y position
-%     reset_traj = find(data_lab.ResetTraj==1,1,'last');
-%     data_lab(1:reset_traj,:) = [];
-%     longitude0 = deg2rad(11);
-%     latitude0 = deg2rad(57);
-%     Earth_rad = 6371000.0;
-% 
-%     X = Earth_rad * (data_lab.LongGPS_deg_ - longitude0) * cos(latitude0);
-%     Y = Earth_rad * (data_lab.LatGPS_deg_ - latitude0);
-% 
-%     % Obtain the relative time of the data
-% %     Y = round(X,N) 
-%     data_lab.Time = round((data_lab.Time_ms_- data_lab.Time_ms_(1))*0.001, 4);
-%     index = find(data_lab.Time == time_start);
-% 
-%     initial_state.roll = data_lab.StateEstimateRoll_rad_(index);
-%     initial_state.roll_rate = data_lab.StateEstimateRollrate_rad_s_(index);
-%     initial_state.steering = data_lab.StateEstimateDelta_rad_(index);
-%     initial_state_estimate.x = data_lab.StateEstimateX_m_(index) - X(1);
-%     initial_state_estimate.y = data_lab.StateEstimateY_m_(index) - Y(1);
-%     initial_state_estimate.heading = data_lab.StateEstimatePsi_rad_(index);
-% 
-% elseif init == 0
-%     initial_state.roll = deg2rad(0);
-%     initial_state.roll_rate = deg2rad(0);
-%     initial_state.steering = deg2rad(0);
-%     initial_state.x = 1; %why 1 and not 0?
-%     initial_state.y = 0;
-%     initial_state.heading = deg2rad(0);
-%     initial_pose=[initial_state.x; initial_state.y; initial_state.heading];
-% else
-%     disp('Bad initialization');
-% end
-
 %% Reference trajectory generation
-%SHAPE options:sharp_turn, line, infinite, circle, ascent_sin, smooth_curve
-type = 'infinite';
-% % Distance between points
-% ref_dis = 0.05;
-% % Number of reference points
-% N = 200; 
-% % Scale (only for infinite and circle)
-% scale = 40; 
-
-% [Xref,Yref,Psiref] = Trajectory(Run_tests);
-
-%[Xref,Yref,Psiref] = ReferenceGenerator(type,ref_dis,N,scale);
-
-
-% % ref_dis = 0.3;
-% % laps=1;
-% % lL=30; % length of straigt segment between the turns
-% ref_dis = 0.4;
-% laps=0.5;
-% lL=10; % length of straigt segment between the turns
-% 
-% [Xref,Yref,Psiref] = ReferenceGenerator('line',ref_dis,lL,laps);
-% 
-% 
-% % read trajectory from file
-% %[Xref,Yref,Psiref,Vref,ttt]=Refgeneration({'x','y','v'},'AATrajCorrectedSpeed.csv');
-% %[Xref,Yref,Psiref]=Refgeneration({'x','y','v'},'AATrajCorrectedSpeed.csv');
-% % ref_traj = [Xref,Yref,Psiref,Vref];
-% 
-% % Calculating time vector given a constant speed
-% % TODO this should probably be changed, vv is used now, Vref or ttt should be
-% % obtained differently
-% ttt=[0;sqrt((Xref(1:end-1)-Xref(2:end)).^2+(Yref(1:end-1)-Yref(2:end)).^2)/vv];
-% t_ref=cumsum(ttt);
-% ttt(1)=ttt(2); % avoid 0 sampling time
-% [Xref,Yref,Psiref,Vref]=Refgeneration({'t','x','y'},[t_ref, Xref,Yref]);
-
-
-%% test 2: Rotate the trajectory of Test 1 counterclockwise by "rotate_angle_traj" degrees; the other parameters keep unchanged
 % Constant speed of the bicycle in meters per second
 Vref_test = 2;            
 % only for infinite and circle - radius used
 laps = 1;
 % Number of the whole reference points
-lL = 80; 
+lL = 70; 
 % Distance between trajectory points in meters
-ref_dis = 1;
+ref_dis = 1 ;
 
-[Xref,Yref,Psiref,t_ref] = differenttest_Simon('11',ref_dis,lL,laps,Vref_test); %Change this for diff traj
+[Xref,Yref,Psiref,t_ref] = differenttest('1',ref_dis,lL,laps,Vref_test);
 
-[psiref, Vref] = Refgeneration_test(Xref, Yref, t_ref);
-
-
-% data_speedup = readmatrix('AAshortStraight_speedup1time');
-% 
-% 
-% Xref = data_speedup(:, 1);
-% Yref = data_speedup(:, 2);
-% t_ref = data_speedup(:, 3);
+% %% Plot trajectory before running (for DEBUG) ----------
+% % Example: Label the trajectory every 50 data points
+% step = 10; 
+% figure;
+% plot(Xref, Yref, 'ko', 'MarkerSize', 2); % Plot the path in black
+% hold on;
+% for i = 1:step:length(Xref)
+% % Plot a red circle at the point
+% plot(Xref(i), Yref(i), 'ro', 'MarkerFaceColor', 'r'); 
+% % Add the time label near the point
+% text_label = sprintf('t=%.1f s', t_ref(i));
+% text(Xref(i) + 0.2, Yref(i) + 1, text_label, 'FontSize', 8); 
+% end
+% hold off;
+% xlabel('X Position (m)');
+% ylabel('Y Position (m)');
+% title('Trajectory with Time Labels');
+% axis equal;
+% grid on;
+% %% -----------------------------------------------------
 
 [Psiref, Vref] = Refgeneration_test(Xref, Yref, t_ref);
-[psiref, Vref] = Refgeneration_test(Xref, Yref, t_ref);
-
-
-% Step 3: Generate reference data with Refgeneration_test function
-% [Xref, Yref, Psiref, Vref] = Refgeneration({'t', 'x', 'y'}, [t_ref, Xref, Yref]);
-% Vref = smoothdata(Vref, 'gaussian', 5);
-
-
- 
 v_init = Vref(1); % needed for lqr, referenceTest, simulink>atateestimator
-
-%test_curve=[Xref,Yref,Psiref];
 Nn = length(Xref); % needed for simulink
 
-%% OWN TRAJECTORY
-% if Run_tests == 2
-%[Xref,Yref,Psiref] = ReferenceGenerator(type,ref_dis,N,scale);
-% test_traj();
-% data = fileread('trajectory.txt');
-% test_curve=[Xref,Yref,Psiref];
-% Nn = size(test_curve,1); % needed for simulink
-% end
-
-%% Reference test (warnings and initialization update)
-%if ((Run_tests == 0 || Run_tests == 2) && init == 0)
-    %referenceTest(test_curve,hor_dis,Ts,initial_pose,v_init, ref_dis);
-    referenceTest([Xref Yref Psiref],hor_dis,Ts,vv);
-         
-    offset_x = 0;
-    offset_y = 0;
-    offset_heading = 0;
-    % Initial X and Y positions of bike are the first trajectory point, and
-    % plus the offset
-    initial_state.x = Xref(1) + offset_x;
-    initial_state.y = Yref(1) + offset_y;
-    % Calculate the initial heading angle using the first two trajectory
-    % points, then convert it from degrees to radians, and plus the offset
-    initial_state.heading = deg2rad(atand((Yref(2)-Yref(1))/(Xref(2)-Xref(1)))) + deg2rad(offset_heading);
-
-    initial_state.roll = deg2rad(0);
-    initial_state.roll_rate = deg2rad(0);
-    initial_state.steering = deg2rad(0);
-    initial_pose=[initial_state.x; initial_state.y; initial_state.heading];
-
-    initial_state_estimate = initial_state;
-%end
+%% Init states
+offset_x = 0;
+offset_y = 0;
+offset_heading = 0;
+% Initial X and Y positions of bike are the first trajectory point, and
+% plus the offset
+initial_state.x = Xref(1) + offset_x;
+initial_state.y = Yref(1) + offset_y;
+% Calculate the initial heading angle using the first two trajectory
+% points, then convert it from degrees to radians, and plus the offset
+initial_state.heading = deg2rad(atand((Yref(2)-Yref(1))/(Xref(2)-Xref(1)))) + deg2rad(offset_heading);
+initial_state.roll = deg2rad(0);
+initial_state.roll_rate = deg2rad(0);
+initial_state.steering = deg2rad(0);
+initial_pose=[initial_state.x; initial_state.y; initial_state.heading];
+initial_state_estimate = initial_state;
 
 %% Unpacked bike_params
 [hh,lr,lf,lambda,cc,mm,h_imu,Tt] = UnpackBike_parameters(bike_params);
@@ -218,29 +122,13 @@ Nn = length(Xref); % needed for simulink
 %       - IMU_roll_mod: Roll angle offset in degrees.
 %       - IMU_pitch_mod: Pitch angle offset in degrees.
 %       - IMU_yaw_mod: Yaw angle offset in degrees.
-%
 % Outputs:
 %   T: 3x3 transformation matrix that represents the rotation defined by the IMU orientation.
-%
 % The transformation matrix is computed using the roll, pitch, and yaw angles converted to radians.
 % The matrix is used in Simulink State estimator->Linearized Bicycle Model on Constant Velocity
 T = TransMatrix(bike_params);                                             
 
-%% Disturbance Model
-% 
-% % Roll Reference  
-% roll_ref_generation;%long time ago left by other students, it's helpless now but keep it
-% 
-% % Steering Rate State Perturbation
-% pert_deltadot_state = 0; % Switch ON (1) / OFF (0) the perturbation
-% pert_deltadot_state_fun = @(time)  -0.5*(time>10) && (ceil(mod(time/3,2)) == 1) &&(time<30);
-% 
-% % Roll Rate State Perturbation
-% pert_phidot_state = 0; % Switch ON (1) / OFF (0) the perturbation
-% pert_phidot_state_fun = @(time) cos(time)*(time>10 && time < 10.4);
-
 %% Balancing Controller
-
 % Outer loop -- Roll Tracking
 P_balancing_outer = 3.75;
 I_balancing_outer = 0.0;
@@ -280,7 +168,6 @@ V=round(V,1);
 K_GPS=zeros(V_n,7,7);
 K_noGPS=zeros(V_n,7,7);
 
-
 counter=zeros(V_n,1);
 A_d=zeros(V_n,7,7);
 B_d=zeros(V_n,7,1);
@@ -318,6 +205,88 @@ GainsTable = table(V',K_GPS,K_noGPS,A_d,B_d,C,D, 'VariableNames', {'V','K_GPS','
 % looks like the controller is not speed dependent, one fixed speed
 %% The LQR controller
 [k1,k2,e1_max,e2_max] = LQRcontroller(v_init,lr,lf);
+
+%% MPC Trajectory controller
+max_permissible_e1=100;
+max_permissible_e2=100;
+a = lr;
+b = lr+lf;
+
+N_outer=130; %prediction horizont
+%penalty matrices 
+Q_outer=[1 0; 0 1]*1e-2;  % penalty on state deviation
+Pf_outer=[3 0; 0 100];  % penalty on final prediction step, i.e. "how important to reach"
+R_outer=1;          % penalty on control signal 
+
+% Q_outer=eye(2)*1e-2;  % penalty on state deviation
+% Pf_outer=eye(2)*1e8;  % penalty on final prediction step, i.e. "how important to reach"
+% R_outer=2;            % penalty on control signal 
+
+% x=[e1 e2]'
+A_outer=[0 v;0 0];
+B_outer=[a*v/b;v/b];
+
+C_outer=eye(2);
+D_outer=zeros(1,2)';
+
+sys_outer = ss(A_outer,B_outer,C_outer,D_outer);
+
+% Discretization
+sys_dis_outer = c2d(sys_outer,Ts);
+Ad_outer = sys_dis_outer.A;
+Bd_outer = sys_dis_outer.B;
+Cd_outer = sys_dis_outer.C;
+Dd_outer = sys_dis_outer.D;
+
+%mpc 
+stateOfConstraint_outer=[1 0;
+                   -1 0;
+                   0 1;
+                   0 -1];
+stateConstraintVal_outer=[max_permissible_e1;
+                    max_permissible_e1;
+                    max_permissible_e2;
+                    max_permissible_e2];
+inputConstraint_outer=[1;
+                -1];
+
+inputConstraintVal_outer=deg2rad(20);%max_permissible_str-deg2rad(10); % harder constraint on outer?
+
+[rowInputConstraint_outer,colInputConstraint_outer]=size(inputConstraint_outer);
+[rowStateOfConstraint_outer,colStateOfConstraint_outer]=size(stateOfConstraint_outer);
+
+%Obs. constraints have the form Fx +Gu <=h, different from MPC course...
+%Size of F:
+%   - Cols: cols in x constr. times prediction steps (N) 
+%   - Rows: rows in x constr. times N + rows in u constr.
+%           times N
+F_outer=[kron([eye(N_outer)],stateOfConstraint_outer);
+    zeros(rowInputConstraint_outer*N_outer,colStateOfConstraint_outer*N_outer)];
+%Size of G:
+%   - Cols: cols in u constr. times N
+%   - Rows: rows in x constr. times N + rows in u constr.
+%           times N
+G_outer=[zeros(N_outer*rowStateOfConstraint_outer,N_outer);kron(eye(N_outer),[1; -1])];
+
+%Size of h_mpc:
+%   -Cols: 1
+%   -Rows: rows in x constr. times N + rows in u constr.
+%           times N
+h_mpc_outer=[kron([ones(1*N_outer,1)],stateConstraintVal_outer);
+    ones(N_outer*rowInputConstraint_outer,1)*inputConstraintVal_outer];
+
+mpc_outer_params=struct();
+mpc_outer_params.Ad=Ad_outer;
+mpc_outer_params.Bd=Bd_outer;
+mpc_outer_params.Cd=Cd_outer;
+mpc_outer_params.Dd=Dd_outer;
+mpc_outer_params.N=N_outer;
+mpc_outer_params.Q=Q_outer;
+mpc_outer_params.Pf=Pf_outer;
+mpc_outer_params.R=R_outer;
+mpc_outer_params.F=F_outer;
+mpc_outer_params.G=G_outer;
+mpc_outer_params.h=h_mpc_outer;
 
 %% Transfer function for heading in wrap traj
 %feed forward transfer function for d_psiref to steering reference (steering contribution for heading changes)
