@@ -172,8 +172,8 @@
         figure('Name', Tnumber);        
         subplot(211);
         hold on;
-        p1 = plot(Results.delta_psi.Time(:,1), rad2deg(Results.delta_psi.Data(:,1)));
-        p2 = plot(Results.delta_ref.Time(:,1), rad2deg(Results.delta_ref.Data(:,1)));
+        %p1 = plot(Results.delta_psi.Time(:,1), rad2deg(Results.delta_psi.Data(:,1)));
+        %p2 = plot(Results.delta_ref.Time(:,1), rad2deg(Results.delta_ref.Data(:,1)));
         xlabel('Time [s]');
         ylabel('Angle [Deg]');
         legend('delta psi', 'delta_{ref}', 'Location', 'southeast');
@@ -183,7 +183,7 @@
         subplot(212);
         hold on;
         p3 = plot(Results.roll_ref.Time(:,1), rad2deg(Results.roll_ref.Data(:,1)));
-        p4 = plot(Results.delta_ref.Time(:,1), rad2deg(Results.delta_ref.Data(:,1)));
+        %p4 = plot(Results.delta_ref.Time(:,1), rad2deg(Results.delta_ref.Data(:,1)));
         xlabel('Time [s]');
         ylabel('Angle [Deg]');
         legend('roll_{ref}', 'delta_{ref}', 'Location', 'southeast');
@@ -403,8 +403,8 @@
         hold on;
         p1 = plot(Results.delta_e1.Time(:,1),rad2deg(Results.delta_e1.Data(:,1)));
         p2 = plot(Results.delta_e2.Time(:,1),rad2deg(Results.delta_e2.Data(:,1)));
-        p3 = plot(Results.delta_psi.Time(:,1),rad2deg(Results.delta_psi.Data(:,1)));
-        p4 = plot(Results.delta_ref.Time(:,1),rad2deg(Results.delta_ref.Data(:,1)));
+        %p3 = plot(Results.delta_psi.Time(:,1),rad2deg(Results.delta_psi.Data(:,1)));
+        %p4 = plot(Results.delta_ref.Time(:,1),rad2deg(Results.delta_ref.Data(:,1)));
         xlabel('Time [t]')
         ylabel('Angle [Deg]')
         legend('delta e_1','delta e_2','delta psi','delta_{ref}','Location','southeast')
@@ -414,7 +414,7 @@
         subplot(212)
         hold on;
         p5 = plot(Results.roll_ref.Time(:,1),rad2deg(Results.roll_ref.Data(:,1)));
-        p6 = plot(Results.delta_ref.Time(:,1),rad2deg(Results.delta_ref.Data(:,1)));
+        %p6 = plot(Results.delta_ref.Time(:,1),rad2deg(Results.delta_ref.Data(:,1)));
         xlabel('Time [t]')
         ylabel('Angle [Deg]')
         legend('roll_{ref}','delta_{ref}','Location','southeast')

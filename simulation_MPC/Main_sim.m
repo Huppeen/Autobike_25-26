@@ -139,50 +139,41 @@ type = 'infinite';
 
 
 %% test 2: Rotate the trajectory of Test 1 counterclockwise by "rotate_angle_traj" degrees; the other parameters keep unchanged
-% Constant speed of the bicycle in meters per second
-Vref_test = 2;            
-% only for infinite and circle - radius used
-laps = 1;
 % Number of the whole reference points
-lL = 80; 
+lL = 80;           
+% only for infinite and circle - radius used
+laps = 1; 
 % Distance between trajectory points in meters
 ref_dis = 1;
+% Constant speed of the bicycle in meters per second
+Vref = vv*ones(lL,1); 
 
-[Xref,Yref,Psiref,t_ref] = differenttest_Simon('11',ref_dis,lL,laps,Vref_test); %Change this for diff traj
-
-[psiref, Vref] = Refgeneration_test(Xref, Yref, t_ref);
-
-
-% data_speedup = readmatrix('AAshortStraight_speedup1time');
-% 
-% 
-% Xref = data_speedup(:, 1);
-% Yref = data_speedup(:, 2);
-% t_ref = data_speedup(:, 3);
-
-[Psiref, Vref] = Refgeneration_test(Xref, Yref, t_ref);
-[psiref, Vref] = Refgeneration_test(Xref, Yref, t_ref);
-
-
-% Step 3: Generate reference data with Refgeneration_test function
-% [Xref, Yref, Psiref, Vref] = Refgeneration({'t', 'x', 'y'}, [t_ref, Xref, Yref]);
-% Vref = smoothdata(Vref, 'gaussian', 5);
-
-
+% Reference generation
+[Xref,Yref,Psiref,t_ref] = differenttest_Simon('16',ref_dis,lL,laps,vv); %Change this for diff traj
  
 v_init = Vref(1); % needed for lqr, referenceTest, simulink>atateestimator
-
-%test_curve=[Xref,Yref,Psiref];
 Nn = length(Xref); % needed for simulink
 
-%% OWN TRAJECTORY
-% if Run_tests == 2
-%[Xref,Yref,Psiref] = ReferenceGenerator(type,ref_dis,N,scale);
-% test_traj();
-% data = fileread('trajectory.txt');
-% test_curve=[Xref,Yref,Psiref];
-% Nn = size(test_curve,1); % needed for simulink
-% end
+%% Plot trajectory before running (for DEBUG) ----------
+% Example: Label the trajectory every 50 data points
+step = 10; 
+figure;
+plot(Xref, Yref, 'ko', 'MarkerSize', 2); % Plot the path in black
+hold on;
+for i = 1:step:length(Xref)
+    % Plot a red circle at the point
+    plot(Xref(i), Yref(i), 'ro', 'MarkerFaceColor', 'r'); 
+    
+    % Add the time label near the point
+    text_label = sprintf('t=%.1f s', t_ref(i));
+    text(Xref(i) + 0.2, Yref(i) + 1, text_label, 'FontSize', 8); 
+end
+hold off;
+xlabel('X Position (m)');
+ylabel('Y Position (m)');
+title('Trajectory with Time Labels');
+axis equal;
+grid on;
 
 %% Reference test (warnings and initialization update)
 %if ((Run_tests == 0 || Run_tests == 2) && init == 0)
@@ -380,16 +371,10 @@ required_vars = {'gg','Ts','badGPS','Xref','Yref','t_ref','k1','k2','e1_max','in
 %% Start the Simulation
 if Run_tests == 0 || Run_tests == 2
 tic
-try 
-    Results = sim(model); % If no error occurs, MATLAB skips the catch.
-    catch error_details %note: the model has runned for one time here
-end
-toc
 
-% Simulation Messages and Warnings
-% if Results.stop.Data(end) == 1
-%     disp('Message: End of the trajectory has been reached');
-% end
+Results = sim(model); % If no error occurs, MATLAB skips the catch.
+
+toc
 
 %% Plotting
 % If you want to compare two different simulation results, then change the

@@ -26,9 +26,8 @@ function [Xref,Yref,Psiref] = ReferenceGenerator(type,ref_dis,N,scale)
 
         case 'sharp_turn'
             t = t*ref_dis;
-            Xref = 7*t;
-            Yref = 5*[0*(1:300) 0.01*(1:800) 8*ones(1,1000)];
-%            psiref=atan2(yref(2:N)-yref(1:N-1),xref(2:N)-xref(1:N-1)); 
+            Xref = t;
+            Yref = [zeros(N/2,1); t(1:N/2)];
             
         case 'smooth_curve'
             t = t*ref_dis;
