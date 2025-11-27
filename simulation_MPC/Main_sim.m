@@ -64,11 +64,13 @@ Vref_test = 2;
 % only for infinite and circle - radius used
 laps = 1;
 % Number of the whole reference points
-lL = 70; 
+lL = 100; 
 % Distance between trajectory points in meters
 ref_dis = 1 ;
 
-[Xref,Yref,Psiref,t_ref] = differenttest('1',ref_dis,lL,laps,Vref_test);
+[Xref,Yref,Psiref,t_ref] = differenttest('3',ref_dis,lL,laps,Vref_test);
+%used to set Vref constant
+Vref= vv * ones(1, length(Xref));
 
 % %% Plot trajectory before running (for DEBUG) ----------
 % % Example: Label the trajectory every 50 data points
@@ -91,7 +93,8 @@ ref_dis = 1 ;
 % grid on;
 % %% -----------------------------------------------------
 
-[Psiref, Vref] = Refgeneration_test(Xref, Yref, t_ref);
+%Do not use ? 
+%[Psiref, Vref] = Refgeneration_test(Xref, Yref, t_ref);
 v_init = Vref(1); % needed for lqr, referenceTest, simulink>atateestimator
 Nn = length(Xref); % needed for simulink
 
@@ -212,7 +215,7 @@ max_permissible_e2=100;
 a = lr;
 b = lr+lf;
 
-N_outer=130; %prediction horizont
+N_outer=50; %prediction horizont
 %penalty matrices 
 Q_outer=[1 0; 0 1]*1e-2;  % penalty on state deviation
 Pf_outer=[3 0; 0 100];  % penalty on final prediction step, i.e. "how important to reach"

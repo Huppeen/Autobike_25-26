@@ -14,6 +14,7 @@ function [psiref, Vref] = Refgeneration_test(Xref, Yref, t_ref)
 
         % Compute speed vv
         Vref(inn) = sqrt(dx^2 + dy^2) / dt;
+
     end
 
     % Set the last point’s psi and vv to match the previous point

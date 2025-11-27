@@ -5,266 +5,53 @@ function [Xref,Yref,Psiref,t_ref] = differenttest(testnumber,ref_dis,lL,laps,Vre
             [Xref,Yref,Psiref] = ReferenceGenerator('line',ref_dis,lL,laps);
             % Time vector calculated based on trajectory length and speed
             t_ref = linspace(0, (lL-1)/Vref_test, lL)';
-        case '2'
-            %% test 2: Rotate the trajectory of Test 1 counterclockwise by "rotate_angle_traj" degrees; the other parameters keep unchanged
-            % Generate a straight-line trajectory with the function (ReferenceGenerator)
-            [Xref,Yref,Psiref] = ReferenceGenerator('line',ref_dis,lL,laps);
-            % Convert the angle "rotate_angle_traj" from degrees to radians
-            rotate_angle_traj = 0;
-            rotate_angle_traj = deg2rad(rotate_angle_traj); 
-            % Define the 2D rotation matrix
-            rotate_matrix = [cos(rotate_angle_traj), -sin(rotate_angle_traj); 
-                             sin(rotate_angle_traj), cos(rotate_angle_traj)];
-            % Combine Xref and Yref into a matrix for transformation
-            coords = [Xref(:), Yref(:)]'; 
-            % Apply the rotation matrix
-            rotated_coords = rotate_matrix * coords;
-            % Rotated Xref
-            Xref = rotated_coords(1, :)'; 
-            % Rotated Yref
-            Yref = rotated_coords(2, :)'; 
-            % Rotate Psiref
-            Psiref = Psiref + rotate_angle_traj;
-            % Time reference
+        case '2' 
+            % Generate a straight-line with a sharp turn trajectory with the function (ReferenceGenerator)
+            [Xref,Yref,Psiref] = ReferenceGenerator('sharp_turn',ref_dis,lL,laps);
+            % Time vector calculated based on trajectory length and speed
             t_ref = linspace(0, (lL-1)/Vref_test, lL)';
         case '3'
-            % Define parameters
-            N_line = 50; % Number of points for the straight line
-            N_circle = 135; % Number of points for the circle
-            scale = 30; % Circle radius
-            
-            % Straight line part
-            t_line = (0:(N_line-1))';
-            Xref_line = t_line * ref_dis;
-            Yref_line = zeros(N_line, 1);
-            
-            % Circle part
-            t_circle = (1:N_circle)' * ref_dis / scale; % Start from the first point to avoid overlap
-            Xref_circle = scale * sin(t_circle) + Xref_line(end); % Connect circle start to line end
-            Yref_circle = -scale * cos(t_circle) + scale; % Keep the circle centered within the range
-            
-            % Combine path
-            Xref = [Xref_line; Xref_circle];
-            Yref = [Yref_line; Yref_circle];
-            
-            % Calculate distances between consecutive points
-            distances = sqrt(diff(Xref).^2 + diff(Yref).^2);
-            
-            % Calculate tangent angles between consecutive points
-            Psiref = [atan2(Yref(2) - Yref(1), Xref(2) - Xref(1)); atan2(Yref(2:end) - Yref(1:end-1), Xref(2:end) - Xref(1:end-1))];
-            
-            % Calculate time series to ensure constant speed of 2 m/s
-            t_ref = [0; cumsum(distances / Vref_test)];
-
-        case '4'
-            % Define parameters
-            N_line = 50; % Number of points for the straight line
-            N_circle = 280; % Number of points for the circle, 135
-            scale = 50; % Circle radius
-            ref_dis = 0.8; % Reference distance
-            
-            % Straight line part
-            t_line = (0:(N_line-1))';
-            Xref_line = t_line * ref_dis;
-            Yref_line = zeros(N_line, 1);
-            
-            % Circle part
-            t_circle = (1:N_circle)' * ref_dis / scale; % Start from the first point to avoid overlap
-            Xref_circle = scale * sin(t_circle) + Xref_line(end); % Connect circle start to line end
-            Yref_circle = -scale * cos(t_circle) + scale; % Keep the circle centered within the range
-            
-            % Combine path
-            Xref = [Xref_line; Xref_circle];
-            Yref = [Yref_line; Yref_circle];
-            
-            % Calculate distances between consecutive points
-            distances = sqrt(diff(Xref).^2 + diff(Yref).^2);
-            
-            % Define speed profile parameters
-            initial_speed = 2; % Initial speed in m/s
-            final_speed = 4; % Final speed in m/s
-            hold_time = 10; % Time to hold the final speed in seconds
-            switch_time = 10; % Time at which speed switches to 4 m/s
-            
-            % Generate time reference for each point
-            time_ref = [0; cumsum(distances / initial_speed)];
-            
-            % Adjust speed profile based on time_ref
-            speed_profile = initial_speed * ones(size(time_ref));
-            speed_profile(time_ref >= switch_time & time_ref < switch_time + hold_time) = final_speed;
-            speed_profile(time_ref >= switch_time + hold_time) = initial_speed;
-            % Calculate tangent angles between consecutive points
-            Psiref = [atan2(Yref(2) - Yref(1), Xref(2) - Xref(1)); atan2(Yref(2:end) - Yref(1:end-1), Xref(2:end) - Xref(1:end-1))];
-              
-            % Recalculate adjusted time reference based on the new speed profile
-            t_ref = [0; cumsum(distances ./ speed_profile(1:end-1))];
-
-            case '5'
-            % Define parameters
-            N_line = 50; % Number of points for the straight line
-            Vref_test = 2; % Initial speed in m/s
-            
-            % Straight line part
-            t_ref = (0:N_line-1)' * 0.5; % Generate values like 0, 0.5, 1, 1.5, ..., 24.5
-            Xref = zeros(N_line, 1);
-            Yref = zeros(N_line, 1);
-            
-            % Introduce speed change at specific time
-            boost_time = 5; % Time to boost speed (in seconds)
-            boost_duration = 5; % Duration of boost (in seconds)
-            boost_index = find(t_ref >= boost_time & t_ref < (boost_time + boost_duration));
-            
-            % Adjust Xref to be integers with non-uniform increments
-            Vref = Vref_test * ones(N_line-1, 1); % Initial speed array
-            Vref(boost_index(1:end-1)) = 4; % Adjust speed to 4 m/s during boost
-            
-            % Compute Xref with position as integers
-            for i = 2:N_line
-                dt = t_ref(i) - t_ref(i-1); % Constant time step
-                Xref(i) = Xref(i-1) + Vref(i-1) * dt; % Varying position increments rounded to integers
-            end
-            
-            % Calculate tangent angles between consecutive points
-            Psiref = [atan2(Yref(2) - Yref(1), Xref(2) - Xref(1)); atan2(Yref(2:end) - Yref(1:end-1), Xref(2:end) - Xref(1:end-1))];
-
-
-            case '6'
-            % Define parameters
-            N_line = 50; % Number of points for the straight line
-            Vref_test = 2; % Initial speed in m/s
-            
-            % Straight line part
-            t_line = (0:(N_line-1))';
-            Xref_line = t_line * ref_dis;
-            Yref_line = zeros(N_line, 1);
-            
-            % Combine path (only straight line)
-            Xref = Xref_line;
-            Yref = Yref_line;
-            
-            % Calculate distances between consecutive points
-            distances = sqrt(diff(Xref).^2 + diff(Yref).^2);
-            
-            % Introduce speed change at a specific time
-            boost_time = 5; % Time to boost speed (in seconds)
-            boost_duration = 10; % Duration of boost (in seconds)
-            Vref = Vref_test * ones(size(distances)); % Initial speed array
-            
-            % Adjust speed to 4 m/s for the boost duration
-            for i = 1:length(t_line)-1
-                if t_line(i) >= boost_time && t_line(i) < (boost_time + boost_duration)
-                    Vref(i) = 4;
-                end
-            end
-            
-            % Calculate time series to account for speed change
-            t_ref = [0; cumsum(distances ./ Vref)];
-            
-            % Calculate tangent angles between consecutive points
-            Psiref = [atan2(Yref(2) - Yref(1), Xref(2) - Xref(1)); atan2(Yref(2:end) - Yref(1:end-1), Xref(2:end) - Xref(1:end-1))];
-
-            case '7'
-            % Define parameters
-            N_line = 50; % Number of points
-            Vref_test = 2; % Initial speed (m/s)
-            
-            % Uniform Xref and Yref
-            dx = 1; % Position step (1 meter)
-            Xref = (0:N_line-1)' * dx; % Uniform Xref
-            Yref = zeros(N_line, 1); % Yref remains zero for a straight line
-            
-            % Speed change between Xref = 5 and 10 meters
-            boost_start_index = find(Xref >= 5 & Xref < 15); % Boost interval
-            Vref = Vref_test * ones(N_line, 1); % Initial speed 2 m/s
-            Vref(boost_start_index) = 4; % Set speed to 4 m/s during boost
-            
-            % Calculate t_ref based on uniform Xref and varying Vref
-            t_ref = zeros(N_line, 1); % Initialize time array
-            for i = 2:N_line
-                dt = dx / Vref(i-1); % Time step based on speed
-                t_ref(i) = t_ref(i-1) + dt; % Accumulate time
-            end
-            
-            % Calculate tangent angles
-            Psiref = [atan2(Yref(2) - Yref(1), Xref(2) - Xref(1)); atan2(Yref(2:end) - Yref(1:end-1), Xref(2:end) - Xref(1:end-1))];
-                     
-            case '8'                
-            % Parameter settings
-            start_point = [0, 0]; % Start point
-            first_straight_end = [40, 0]; % End point of the first straight segment
-            circle_center = [40, 10]; % Center of the semicircle
-            circle_radius = 10; % Radius of the semicircle
-            final_point = [0, 20]; % End point
-            speed = Vref_test; % Speed
-            
-            % First segment: Straight line along the X-axis
-            x1 = linspace(start_point(1), first_straight_end(1));
+            % Parameters
+            % radius = 10; %usually 10 gonna try 30 or 40 to give it 10 laps without crashing needs 120 straight length for 40 radius
+            % circle_center = [40, 10]; %usually 40 but needed to be 120
+            straight_start = [0, 0];
+            % straight_end = [40, 0]; %usually 40 but updated to 120 
+            radius = 30;
+            straight_end = [90,0];
+            circle_center = [90,30];
+            ref_dis = 0.1;
+            % First segment: straight line
+            x1 = linspace(straight_start(1), straight_end(1));
             y1 = zeros(size(x1));
-            
-            % Second segment: Semicircular path
-            theta = linspace(-pi/2, pi/2, 100); % Angle range for the semicircle
-            x2 = circle_center(1) + circle_radius * cos(theta);
-            y2 = circle_center(2) + circle_radius * sin(theta);
-            
-            % Third segment: Straight line back to the endpoint
-            x3 = linspace(first_straight_end(1), final_point(1));
-            y3 = linspace(circle_center(2) + circle_radius, final_point(2), 100);
-            
-            % Combine the trajectory
-            x = [x1, x2, x3];
-            y = [y1, y2, y3];
-            
-            % Remove duplicate points
+            % Circle segment, scaled to laps
+            points_per_lap = 200; % resolution per lap
+            total_circle_points = laps * points_per_lap;
+            theta = linspace(-pi/2, 3*pi/2 + 2*pi*(laps-1), total_circle_points);
+            x2 = circle_center(1) + radius * cos(theta);
+            y2 = circle_center(2) + radius * sin(theta);
+            % Combine segments
+            x = [x1, x2];
+            y = [y1, y2];
+            % Remove duplicates if any
             coords = [x', y'];
             [unique_coords, idx] = unique(coords, 'rows', 'stable');
             x = unique_coords(:, 1);
             y = unique_coords(:, 2);
-
             % Recalculate cumulative distance
             dx = diff(x);
             dy = diff(y);
-            segment_lengths = sqrt(dx.^2 + dy.^2); % Length of each segment
-            cumulative_distance = [0; cumsum(segment_lengths)]; % Cumulative distance
-
-            % Ensure no duplicate values in cumulative_distance
-            [cumulative_distance, unique_idx] = unique(cumulative_distance, 'stable');
-            x = x(unique_idx);
-            y = y(unique_idx);
-
-            % Total distance
-            total_distance = cumulative_distance(end);
-            
-            % % Divide into different segments
-            % equal_distances = linspace(0, total_distance, 200);
-
-            % Determine the number of points with a fixed distance of 2
-            num_points = floor(total_distance / ref_dis) + 1; % Calculate the number of points
-            
-            % Generate evenly spaced reference points based on the distance
-
-            equal_distances = linspace(0, (num_points - 1) * ref_dis, num_points);
-            
-            % Interpolate trajectory points
-            Xref = interp1(cumulative_distance, x, equal_distances);
-            Yref = interp1(cumulative_distance, y, equal_distances);
-            Xref = Xref(:);
-            Yref = Yref(:);
-            
-            % Calculate time to each waypoint t_ref
-            t_ref = equal_distances / speed;
-            
-            % Calculate tangent angles
-            Psiref = [atan2(Yref(2) - Yref(1), Xref(2) - Xref(1)); atan2(Yref(2:end) - Yref(1:end-1), Xref(2:end) - Xref(1:end-1))];
-            
-                 
-
-    
-
+            segment_lengths = sqrt(dx.^2 + dy.^2);
+            cumulative_distance = [0; cumsum(segment_lengths)];
+            % evenly spaced reference points
+            num_points = floor(cumulative_distance(end)/ref_dis) + 1;
+            equal_distances = linspace(0, cumulative_distance(end), num_points);
+            % Interpolate
+            Xref = interp1(cumulative_distance, x, equal_distances)';
+            Yref = interp1(cumulative_distance, y, equal_distances)';
+            % heading
+            Psiref = [atan2(Yref(2)-Yref(1), Xref(2)-Xref(1));
+            atan2(diff(Yref), diff(Xref))];
+            % time
+            t_ref = equal_distances' / Vref_test;
     end
-    
-    end
-
-
-
-
-    
+end
