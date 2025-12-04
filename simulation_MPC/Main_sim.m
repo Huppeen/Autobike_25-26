@@ -69,6 +69,10 @@ lL = 100;
 ref_dis = 1 ;
 
 [Xref,Yref,Psiref,t_ref] = differenttest('3',ref_dis,lL,laps,Vref_test);
+fprintf('length(Xref)   = %d\n', length(Xref));
+fprintf('length(Yref)   = %d\n', length(Yref));
+fprintf('length(Psiref) = %d\n', length(Psiref));
+fprintf('length(t_ref)  = %d\n', length(t_ref));
 %used to set Vref constant
 Vref= vv * ones(1, length(Xref));
 
@@ -351,13 +355,17 @@ required_vars = {'gg','Ts','badGPS','Xref','Yref','t_ref','k1','k2','e1_max','in
 
 %% Start the Simulation
 if Run_tests == 0 || Run_tests == 2
+% tic
+% try 
+%     Results = sim(model); % If no error occurs, MATLAB skips the catch.
+%     catch error_details %note: the model has runned for one time here
+% end
+% toc
+% ==============================
 tic
-try 
     Results = sim(model); % If no error occurs, MATLAB skips the catch.
-    catch error_details %note: the model has runned for one time here
-end
 toc
-
+% ==============================
 % Simulation Messages and Warnings
 % if Results.stop.Data(end) == 1
 %     disp('Message: End of the trajectory has been reached');

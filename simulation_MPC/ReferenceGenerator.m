@@ -31,7 +31,8 @@ function [Xref,Yref,Psiref] = ReferenceGenerator(type,ref_dis,N,scale)
 %            psiref=atan2(yref(2:N)-yref(1:N-1),xref(2:N)-xref(1:N-1)); 
             t =t*ref_dis;
             Xref = t;
-            Yref = [zeros(N/2,1);t(1:N/2)];
+            % Yref = [zeros(N/2,1);t(1:N/2)];
+            Yref = [zeros(N/4,1);-t(1:3 *N/4)];
        
         case 'smooth_curve'
             t = t*ref_dis;
