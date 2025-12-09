@@ -21,6 +21,7 @@ load mpc_outer_params.mat
     sim_time = 1000;
 % Sampling Time
     Ts = 0.01; 
+    MPC_Ts = 0.01;
 % First closest point selection in reference. Starts at 2 because the one 
 % before closest is in the local reference as well
     ref_start_idx = 2; %end of page 64 of Lorenzo's thesis
@@ -28,7 +29,7 @@ load mpc_outer_params.mat
     % hor_dis = 10; %tra cosa?
     hor_dis = 10; %tra cosa?
 %Constant Speed [m/s]
-     vv = 2.6;
+     vv = 2;
 % Open the Simulink Model
     open([model '.slx']);
 % Choose the solver
@@ -156,25 +157,27 @@ Nn = length(Xref); % needed for simulink
 
 %% Plot trajectory before running (for DEBUG) ----------
 % Example: Label the trajectory every 50 data points
-step = 10; 
-figure;
-plot(Xref, Yref, 'ko', 'MarkerSize', 2); % Plot the path in black
-hold on;
-for i = 1:step:length(Xref)
-    % Plot a red circle at the point
-    plot(Xref(i), Yref(i), 'ro', 'MarkerFaceColor', 'r'); 
-    
-    % Add the time label near the point
-    text_label = sprintf('t=%.1f s', t_ref(i));
-    text(Xref(i) + 0.2, Yref(i) + 1, text_label, 'FontSize', 8); 
+plot_traj = 0;
+if plot_traj == 1
+    step = 10; 
+    figure;
+    plot(Xref, Yref, 'ko', 'MarkerSize', 2); % Plot the path in black
+    hold on;
+    for i = 1:step:length(Xref)
+        % Plot a red circle at the point
+        plot(Xref(i), Yref(i), 'ro', 'MarkerFaceColor', 'r'); 
+        
+        % Add the time label near the point
+        text_label = sprintf('t=%.1f s', t_ref(i));
+        text(Xref(i) + 0.2, Yref(i) + 1, text_label, 'FontSize', 8); 
+    end
+    hold off;
+    xlabel('X Position (m)');
+    ylabel('Y Position (m)');
+    title('Trajectory with Time Labels');
+    axis equal;
+    grid on;
 end
-hold off;
-xlabel('X Position (m)');
-ylabel('Y Position (m)');
-title('Trajectory with Time Labels');
-axis equal;
-grid on;
-
 %% Reference test (warnings and initialization update)
 %if ((Run_tests == 0 || Run_tests == 2) && init == 0)
     %referenceTest(test_curve,hor_dis,Ts,initial_pose,v_init, ref_dis);
@@ -371,9 +374,7 @@ required_vars = {'gg','Ts','badGPS','Xref','Yref','t_ref','k1','k2','e1_max','in
 %% Start the Simulation
 if Run_tests == 0 || Run_tests == 2
 tic
-
-Results = sim(model); % If no error occurs, MATLAB skips the catch.
-
+Results = sim(model);
 toc
 
 %% Plotting
@@ -389,8 +390,5 @@ Tnumber = 'No test case: General simulation run';
 
 Plot_bikesimulation_results(Tnumber, [Xref,Yref,Psiref], Results, compare_flag, t_ref, Vref, bike_params);
 end
-
-
-%% Test cases for validation
-TestCases(Run_tests,hor_dis,Ts,initial_pose);
-%%
+%% 
+Animate_MPC(Results);
