@@ -33,6 +33,7 @@ clc;
 % Choose the solver
     set_param(model,'AlgebraicLoopSolver','TrustRegion');
 % Choose The Bike - Options:'red', 'black', 'green', 'scooter' or 'plastic' 
+%%try scooter 
     bike = 'green';
 % Load the parameters of the specified bicycle
     bike_params = LoadBikeParameters(bike); 
@@ -64,34 +65,34 @@ Vref_test = 2;
 % only for infinite and circle - radius used
 laps = 1;
 % Number of the whole reference points
-lL = 100; 
+lL = 200; 
 % Distance between trajectory points in meters
 ref_dis = 1 ;
 
-[Xref,Yref,Psiref,t_ref] = differenttest('3',ref_dis,lL,laps,Vref_test);
+[Xref,Yref,Psiref,t_ref] = differenttest('2',ref_dis,lL,laps,Vref_test);
 %used to set Vref constant
 Vref= vv * ones(1, length(Xref));
 
-% %% Plot trajectory before running (for DEBUG) ----------
-% % Example: Label the trajectory every 50 data points
-% step = 10; 
-% figure;
-% plot(Xref, Yref, 'ko', 'MarkerSize', 2); % Plot the path in black
-% hold on;
-% for i = 1:step:length(Xref)
-% % Plot a red circle at the point
-% plot(Xref(i), Yref(i), 'ro', 'MarkerFaceColor', 'r'); 
-% % Add the time label near the point
-% text_label = sprintf('t=%.1f s', t_ref(i));
-% text(Xref(i) + 0.2, Yref(i) + 1, text_label, 'FontSize', 8); 
-% end
-% hold off;
-% xlabel('X Position (m)');
-% ylabel('Y Position (m)');
-% title('Trajectory with Time Labels');
-% axis equal;
-% grid on;
-% %% -----------------------------------------------------
+%% Plot trajectory before running (for DEBUG) ----------
+% Example: Label the trajectory every 50 data points
+step = 10; 
+figure;
+plot(Xref, Yref, 'ko', 'MarkerSize', 2); % Plot the path in black
+hold on;
+for i = 1:step:length(Xref)
+% Plot a red circle at the point
+plot(Xref(i), Yref(i), 'ro', 'MarkerFaceColor', 'r'); 
+% Add the time label near the point
+text_label = sprintf('t=%.1f s', t_ref(i));
+text(Xref(i) + 0.2, Yref(i) + 1, text_label, 'FontSize', 8); 
+end
+hold off;
+xlabel('X Position (m)');
+ylabel('Y Position (m)');
+title('Trajectory with Time Labels');
+axis equal;
+grid on;
+%% -----------------------------------------------------
 
 %Do not use ? 
 %[Psiref, Vref] = Refgeneration_test(Xref, Yref, t_ref);

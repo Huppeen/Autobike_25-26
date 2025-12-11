@@ -53,5 +53,16 @@ function [Xref,Yref,Psiref,t_ref] = differenttest(testnumber,ref_dis,lL,laps,Vre
             atan2(diff(Yref), diff(Xref))];
             % time
             t_ref = equal_distances' / Vref_test;
+          case '4' 
+            % Generate a straight-line with a sharp turn trajectory with the function (ReferenceGenerator)
+            [Xref,Yref,Psiref] = ReferenceGenerator('ascent_sin',ref_dis,lL,laps);
+            % Time vector calculated based on trajectory length and speed
+            t_ref = linspace(0, (lL-1)/Vref_test, lL)';
+          case '5'            
+            % Generate a straight-line trajectory with the function (ReferenceGenerator)
+            [Xref,Yref,Psiref] = ReferenceGenerator('infinite',ref_dis,lL,laps);
+            % Time vector calculated based on trajectory length and speed
+            t_ref = linspace(0, (lL-1)/Vref_test, lL)';
+            %t_ref = equal_distances' / Vref_test;
     end
 end
