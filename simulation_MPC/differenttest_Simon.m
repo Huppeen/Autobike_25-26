@@ -587,7 +587,11 @@ case '16'
 % Time vector calculated based on trajectory length and speed
 t_ref = linspace(0, (lL-1)/Vref_test, lL)';
 
-
+case '17' 
+% Generate a straight-line trajectory with the function (ReferenceGenerator)
+[Xref,Yref,Psiref] = ReferenceGenerator('step',ref_dis,lL,laps);
+% Time vector calculated based on trajectory length and speed
+t_ref = linspace(0, (lL-1)/Vref_test, lL)';
 
 end
 end

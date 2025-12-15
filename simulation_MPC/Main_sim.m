@@ -141,7 +141,7 @@ type = 'infinite';
 
 %% test 2: Rotate the trajectory of Test 1 counterclockwise by "rotate_angle_traj" degrees; the other parameters keep unchanged
 % Number of the whole reference points
-lL = 80;           
+lL = 20;           
 % only for infinite and circle - radius used
 laps = 1; 
 % Distance between trajectory points in meters
@@ -150,14 +150,14 @@ ref_dis = 1;
 Vref = vv*ones(lL,1); 
 
 % Reference generation
-[Xref,Yref,Psiref,t_ref] = differenttest_Simon('16',ref_dis,lL,laps,vv); %Change this for diff traj
- 
+[Xref,Yref,Psiref,t_ref] = differenttest_Simon('1',ref_dis,lL,laps,vv); %Change this for diff traj
+
 v_init = Vref(1); % needed for lqr, referenceTest, simulink>atateestimator
 Nn = length(Xref); % needed for simulink
 
 %% Plot trajectory before running (for DEBUG) ----------
 % Example: Label the trajectory every 50 data points
-plot_traj = 0;
+plot_traj = 1;
 if plot_traj == 1
     step = 10; 
     figure;
@@ -184,7 +184,7 @@ end
     referenceTest([Xref Yref Psiref],hor_dis,Ts,vv);
          
     offset_x = 0;
-    offset_y = 0;
+    offset_y = 1;
     offset_heading = 0;
     % Initial X and Y positions of bike are the first trajectory point, and
     % plus the offset

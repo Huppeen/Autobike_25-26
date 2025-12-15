@@ -51,14 +51,14 @@ xlabel('X position'); ylabel('Y position');
 title('MPC Predicted Global Path');
 
 % Plot predicted horizon
-hPlot = plot(x_global(1,:), y_global(1,:), 'LineWidth', 2);
+hPlot = plot(x_global(1,:), y_global(1,:), '.', 'LineWidth', 1);
 
 % Add car marker at the first prediction point
 hCar = plot(x_global(1,1), y_global(1,1), 'ro', ...
             'MarkerSize', 8, 'MarkerFaceColor', 'r');
 
-xlim([min(x_global(:)-2) max(x_global(:))+2]);
-ylim([min(y_global(:)-2) max(y_global(:))+2]);
+%xlim([min(x_global(:)-2) max(x_global(:))+2]);
+%ylim([min(y_global(:)-2) max(y_global(:))+2]);
 
 
 % Slider
