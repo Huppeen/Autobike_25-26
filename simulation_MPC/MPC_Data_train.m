@@ -54,7 +54,10 @@ function roll_ref =  MPC_estimation(e1,e2,v)
     % max time tunable...
     maxTime=10;
     options = optimset('Display', 'off','TolX',1e-2,'TolFun', 1e-3,'MaxTime',maxTime);
-    
+
+    %ws = optimwarmstart(x,options);
+
+
     EXITFLAG = 0;
     
     [Z,VN,EXITFLAG] = quadprog(2*H,[],Ain,bin,Aeq,beq,[],[],[],options);
