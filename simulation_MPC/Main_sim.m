@@ -9,7 +9,8 @@ clear all;
 clear;
 close all;
 clc;
-load mpc_outer_params.mat
+load mpc_outer_params.mat % Only needed to compare old MPC
+
 %% Simulation Settings and Bike and General Parameters
 % Gravitational Acceleration
     gg = 9.81;
@@ -60,102 +61,29 @@ load mpc_outer_params.mat
     interpolation = 0;  % used in Simulink (you can only use interpolation if scheduling = 1)
     if scheduling==0, interpolation = 0; end  % must be 0 if no scheduling
 
-% %% Initial states
-% if init == 1
-% disp('reading from file')
-%     % data_lab = readtable('Logging_data\Test_session_14_06\data_8.csv');
-% %    data_lab = readtable('Logging_data\Test_session_27_06\data_15.csv');
-% 
-%     %Delete the data before reseting the trajectory and obtain X/Y position
-%     reset_traj = find(data_lab.ResetTraj==1,1,'last');
-%     data_lab(1:reset_traj,:) = [];
-%     longitude0 = deg2rad(11);
-%     latitude0 = deg2rad(57);
-%     Earth_rad = 6371000.0;
-% 
-%     X = Earth_rad * (data_lab.LongGPS_deg_ - longitude0) * cos(latitude0);
-%     Y = Earth_rad * (data_lab.LatGPS_deg_ - latitude0);
-% 
-%     % Obtain the relative time of the data
-% %     Y = round(X,N) 
-%     data_lab.Time = round((data_lab.Time_ms_- data_lab.Time_ms_(1))*0.001, 4);
-%     index = find(data_lab.Time == time_start);
-% 
-%     initial_state.roll = data_lab.StateEstimateRoll_rad_(index);
-%     initial_state.roll_rate = data_lab.StateEstimateRollrate_rad_s_(index);
-%     initial_state.steering = data_lab.StateEstimateDelta_rad_(index);
-%     initial_state_estimate.x = data_lab.StateEstimateX_m_(index) - X(1);
-%     initial_state_estimate.y = data_lab.StateEstimateY_m_(index) - Y(1);
-%     initial_state_estimate.heading = data_lab.StateEstimatePsi_rad_(index);
-% 
-% elseif init == 0
-%     initial_state.roll = deg2rad(0);
-%     initial_state.roll_rate = deg2rad(0);
-%     initial_state.steering = deg2rad(0);
-%     initial_state.x = 1; %why 1 and not 0?
-%     initial_state.y = 0;
-%     initial_state.heading = deg2rad(0);
-%     initial_pose=[initial_state.x; initial_state.y; initial_state.heading];
-% else
-%     disp('Bad initialization');
-% end
+% MPC Horizon
+horizon_in_meter = 3;
+N = horizon_in_meter / (MPC_Ts * vv);
+% N = 130
 
 %% Reference trajectory generation
-%SHAPE options:sharp_turn, line, infinite, circle, ascent_sin, smooth_curve
-type = 'infinite';
-% % Distance between points
-% ref_dis = 0.05;
-% % Number of reference points
-% N = 200; 
-% % Scale (only for infinite and circle)
-% scale = 40; 
-
-% [Xref,Yref,Psiref] = Trajectory(Run_tests);
-
-%[Xref,Yref,Psiref] = ReferenceGenerator(type,ref_dis,N,scale);
-
-
-% % ref_dis = 0.3;
-% % laps=1;
-% % lL=30; % length of straigt segment between the turns
-% ref_dis = 0.4;
-% laps=0.5;
-% lL=10; % length of straigt segment between the turns
-% 
-% [Xref,Yref,Psiref] = ReferenceGenerator('line',ref_dis,lL,laps);
-% 
-% 
-% % read trajectory from file
-% %[Xref,Yref,Psiref,Vref,ttt]=Refgeneration({'x','y','v'},'AATrajCorrectedSpeed.csv');
-% %[Xref,Yref,Psiref]=Refgeneration({'x','y','v'},'AATrajCorrectedSpeed.csv');
-% % ref_traj = [Xref,Yref,Psiref,Vref];
-% 
-% % Calculating time vector given a constant speed
-% % TODO this should probably be changed, vv is used now, Vref or ttt should be
-% % obtained differently
-% ttt=[0;sqrt((Xref(1:end-1)-Xref(2:end)).^2+(Yref(1:end-1)-Yref(2:end)).^2)/vv];
-% t_ref=cumsum(ttt);
-% ttt(1)=ttt(2); % avoid 0 sampling time
-% [Xref,Yref,Psiref,Vref]=Refgeneration({'t','x','y'},[t_ref, Xref,Yref]);
-
-
-%% test 2: Rotate the trajectory of Test 1 counterclockwise by "rotate_angle_traj" degrees; the other parameters keep unchanged
 % Number of the whole reference points
 lL = 20;           
 % only for infinite and circle - radius used
 laps = 1; 
 % Distance between trajectory points in meters
 ref_dis = 1;
-% Constant speed of the bicycle in meters per second
-Vref = vv*ones(lL,1); 
 
 % Reference generation
-[Xref,Yref,Psiref,t_ref] = differenttest_Simon('1',ref_dis,lL,laps,vv); %Change this for diff traj
+[Xref,Yref,Psiref,t_ref] = differenttest_Simon('16',ref_dis,lL,laps,vv); %Change this for diff traj
+
+% Constant speed of the bicycle in meters per second
+Vref = vv*ones(length(Xref),1); 
 
 v_init = Vref(1); % needed for lqr, referenceTest, simulink>atateestimator
 Nn = length(Xref); % needed for simulink
 
-%% Plot trajectory before running (for DEBUG) ----------
+% Plot trajectory before running (for DEBUG) ----------
 % Example: Label the trajectory every 50 data points
 plot_traj = 1;
 if plot_traj == 1
@@ -178,29 +106,29 @@ if plot_traj == 1
     axis equal;
     grid on;
 end
-%% Reference test (warnings and initialization update)
-%if ((Run_tests == 0 || Run_tests == 2) && init == 0)
-    %referenceTest(test_curve,hor_dis,Ts,initial_pose,v_init, ref_dis);
-    referenceTest([Xref Yref Psiref],hor_dis,Ts,vv);
-         
-    offset_x = 0;
-    offset_y = 1;
-    offset_heading = 0;
-    % Initial X and Y positions of bike are the first trajectory point, and
-    % plus the offset
-    initial_state.x = Xref(1) + offset_x;
-    initial_state.y = Yref(1) + offset_y;
-    % Calculate the initial heading angle using the first two trajectory
-    % points, then convert it from degrees to radians, and plus the offset
-    initial_state.heading = deg2rad(atand((Yref(2)-Yref(1))/(Xref(2)-Xref(1)))) + deg2rad(offset_heading);
+%% Reference test
+referenceTest([Xref(:) Yref(:) Psiref(:)],hor_dis,Ts,vv);
 
-    initial_state.roll = deg2rad(0);
-    initial_state.roll_rate = deg2rad(0);
-    initial_state.steering = deg2rad(0);
-    initial_pose=[initial_state.x; initial_state.y; initial_state.heading];
+%% Initial state
+offset_x = 0;
+offset_y = 0;
+offset_heading = 0;
 
-    initial_state_estimate = initial_state;
-%end
+% Initial X and Y positions of bike are the first trajectory point, and
+% plus the offset
+initial_state.x = Xref(1) + offset_x;
+initial_state.y = Yref(1) + offset_y;
+
+% Calculate the initial heading angle using the first two trajectory
+% points, then convert it from degrees to radians, and plus the offset
+initial_state.heading = deg2rad(atand((Yref(2)-Yref(1))/(Xref(2)-Xref(1)))) + deg2rad(offset_heading);
+
+initial_state.roll = deg2rad(0);
+initial_state.roll_rate = deg2rad(0);
+initial_state.steering = deg2rad(0);
+initial_pose=[initial_state.x; initial_state.y; initial_state.heading];
+
+initial_state_estimate = initial_state;
 
 %% Unpacked bike_params
 [hh,lr,lf,lambda,cc,mm,h_imu,Tt] = UnpackBike_parameters(bike_params);

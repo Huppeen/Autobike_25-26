@@ -1,23 +1,21 @@
 function Animate_MPC(Results)
+%% Works only if MPC_Ts == Ts
 
-N = evalin('base', 'mpc_outer_params.N');
-vv = evalin('base', 'vv');
-MPC_Ts = evalin('base', 'MPC_Ts');
+N = evalin('base', 'N');
 
-X_est  = Results.X_est.Data;      % Nsteps × 1
-Y_est  = Results.Y_est.Data;      % Nsteps × 1
-PSI_est = Results.PSI_est.Data;   % Nsteps × 1
+X_est  = Results.X_est.Data;     
+Y_est  = Results.Y_est.Data; 
+PSI_est = Results.PSI_est.Data;  
 MPC_saved_states = Results.MPC_states.Data;
 
 % Extract lateral error states (local y prediction)
 e1_states = MPC_saved_states(:,1:2:end-1);   % Nsteps × N
 
 % Local x prediction (forward along vehicle axis)
-x_local = vv * (1:N) * MPC_Ts;               % 1 × N
-x_local = repmat(x_local, size(e1_states,1), 1);   % Nsteps × N
+x_local = -Results.MPC_long_error.Data;
 
 % Local y prediction
-y_local = e1_states - e1_states(:,1);                          % Nsteps × N
+y_local = e1_states;                          % Nsteps × N
 
 Nsteps = size(x_local,1);
 
@@ -32,9 +30,7 @@ for k = 1:Nsteps
     % Rotation matrix:
     % [ cos(psi) -sin(psi);
     %   sin(psi)  cos(psi) ]
-    if k == 2036
-        1;
-    end
+
     xg = x_local(k,:) * cos(psi) - y_local(k,:) * sin(psi);
     yg = x_local(k,:) * sin(psi) + y_local(k,:) * cos(psi);
 
